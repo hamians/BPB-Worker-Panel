@@ -1571,7 +1571,8 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
                 </div>
 				<div id="apply" class="form-control">
 					<div style="grid-column: 2; width: 100%;">
-						<input type="submit" id="applyButton" class="button disabled" value="APPLY SETTINGS 💥" form="configForm">
+						<input type="submit" id="applyButton" class="button disabled" value="APPLY SETTINGS 💥" form="configForm" disabled>
+                        <div id="settingsError" role="alert" style="color: red; margin-top: 10px;"></div>
 					</div>
 				</div>
 			</form>
@@ -1755,8 +1756,8 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
           
             const enableApplyButton = () => {
                 const isChanged = hasFormDataChanged();
-                applyButton.disabled = !isChanged;
-                applyButton.classList.toggle('disabled', !isChanged);
+                applyBtn.disabled = !isChanged || applyBtn.dataset.saving === 'true';
+                applyBtn.classList.toggle('disabled', applyBtn.disabled);
             };
                       
             passwordChangeForm.addEventListener('submit', event => resetPassword(event));
@@ -1790,6 +1791,9 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
             event.preventDefault();
             event.stopPropagation();
             const applyButton = document.getElementById('applyButton');
+            if (applyButton.dataset.saving === 'true') return;
+            const settingsError = document.getElementById('settingsError');
+            settingsError.textContent = '';
             const getValue = (id) => parseInt(document.getElementById(id).value, 10);              
             const lengthMin = getValue('fragmentLengthMin');
             const lengthMax = getValue('fragmentLengthMax');
@@ -1826,9 +1830,14 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
                 return false;
             }
 
+            const applyButtonVal = applyButton.value;
+            const previousCursor = document.body.style.cursor;
+            applyButton.dataset.saving = 'true';
+            applyButton.disabled = true;
+            applyButton.classList.add('disabled');
+
             try {
                 document.body.style.cursor = 'wait';
-                const applyButtonVal = applyButton.value;
                 applyButton.value = '⌛ Loading...';
 
                 const response = await fetch('/panel', {
@@ -1837,20 +1846,23 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
                     credentials: 'include'
                 });
 
-                document.body.style.cursor = 'default';
-                applyButton.value = applyButtonVal;
-
                 if (response.ok) {
                     alert('Parameters applied successfully 😎');
                     window.location.reload(true);
-                } else {
-                    const errorMessage = await response.text();
-                    console.error(errorMessage, response.status);
+                } else if (response.status === 401) {
                     alert('⚠️ Session expired! Please login again.');
                     window.location.href = '/login';
-                }           
+                } else {
+                    settingsError.textContent = '⚠️ Could not save settings. Your changes are still here. Please try again.';
+                }
             } catch (error) {
+                settingsError.textContent = '⚠️ Could not reach the server. Your changes are still here. Check your connection and try again.';
                 console.error('Error:', error);
+            } finally {
+                document.body.style.cursor = previousCursor;
+                applyButton.value = applyButtonVal;
+                delete applyButton.dataset.saving;
+                configForm.dispatchEvent(new Event('input'));
             }
         }
 
@@ -2018,7 +2030,7 @@ const renderLoginPage = async () => {
                         <label for="password">Password</label>
                         <input type="password" id="password" name="password" required>
                     </div>
-                    <div id="passwordError" style="color: red; margin-bottom: 10px;"></div>
+                    <div id="passwordError" role="alert" style="color: red; margin-bottom: 10px;"></div>
                     <button type="submit" class="button">Login</button>
                 </form>
             </div>
@@ -2026,7 +2038,13 @@ const renderLoginPage = async () => {
     <script>
         document.getElementById('loginForm').addEventListener('submit', async (event) => {
             event.preventDefault();
+            const loginButton = event.currentTarget.querySelector('button[type="submit"]');
+            if (loginButton.disabled) return;
+            const passwordError = document.getElementById('passwordError');
             const password = document.getElementById('password').value;
+            passwordError.textContent = '';
+            loginButton.disabled = true;
+            loginButton.textContent = 'Logging in...';
 
             try {
                 const response = await fetch('/login', {
@@ -2040,12 +2058,18 @@ const renderLoginPage = async () => {
                 if (response.ok) {
                     window.location.href = '/panel';
                 } else {
-                    passwordError.textContent = '⚠️ Wrong Password!';
+                    passwordError.textContent = response.status === 405 || response.status === 401
+                        ? '⚠️ Wrong Password!'
+                        : '⚠️ Could not log in. Please try again.';
                     const errorMessage = await response.text();
                     console.error('Login failed:', errorMessage);
                 }
             } catch (error) {
+                passwordError.textContent = '⚠️ Could not reach the server. Check your connection and try again.';
                 console.error('Error during login:', error);
+            } finally {
+                loginButton.disabled = false;
+                loginButton.textContent = 'Login';
             }
         });
     </script>
