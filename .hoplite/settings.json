@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "run": "npx --yes --package=wrangler@4.158.0 wrangler dev --config .hoplite/wrangler.jsonc --local --ip 0.0.0.0 --port 3000 --persist-to .hoplite/runtime/wrangler"
+  }
+}
